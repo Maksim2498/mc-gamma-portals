@@ -4,7 +4,7 @@
 
     <groupId>space.moontalk.mc</groupId>
     <artifactId>gamma-portals</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 
     <name>Gamma Portals</name>
     <description>Minecraft plugin adding custom portals</description>

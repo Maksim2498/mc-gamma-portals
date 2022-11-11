@@ -102,10 +102,16 @@ public class PortalManager implements Listener {
         if (!changed)
             return;
 
-        val fileStream = new FileInputStream(getFile());
-        val stream     = new BukkitObjectInputStream(fileStream);
+        val file = getFile();
 
-        portals = (Map<String, Set<Portal>>) stream.readObject();
+        if (file.length() > 0) {
+            val fileStream = new FileInputStream(file);
+            val stream     = new BukkitObjectInputStream(fileStream);
+        
+            portals = (Map<String, Set<Portal>>) stream.readObject();
+
+            stream.close();
+        }
 
         changed = false;
     }

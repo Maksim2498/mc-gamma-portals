@@ -25,6 +25,7 @@ public class GammaPortals extends JavaPlugin {
             portalManager = new PortalManager(this);
         } catch (Exception exception) {
             onIOException(exception);
+            return;
         }
 
         registerAutoSaver();
