@@ -1,0 +1,7 @@
+name: GammaPortals 
+version: "${project.version}"
+description: Addes custom portals
+author: maksim2498
+
+main: space.moontalk.mc.gamma.GammaPortals
+api-version: 1.13
