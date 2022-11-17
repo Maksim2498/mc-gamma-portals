@@ -6,6 +6,8 @@
 
 - [About](#about);
 - [Config](#config);
+- [Commands](#commands);
+- [Permissions](#permissions);
 - [Download](#download);
 - [Installation](#installation).
 
@@ -64,6 +66,27 @@ Configuration file has only two entries described below:
 |--------------|--------|-------------------------------------------------------|
 | `max-blocks` | `int`  | Maximum number of inner portal blocks                 |
 | `auto-save`  | `int`  | Number of seconds between automatic portal data saves |
+
+## Commands
+
+| Command        | Arguments   | Permission                         | Description                                    |
+|----------------|-------------|------------------------------------|------------------------------------------------|
+| /fixPortal     | Portal name | gammaPortals.command.fixPortal     | Updates and removes if needed specified portal |
+| /fixPortals    | N/A         | gammaPortals.command.fixPortals    | Updates and removes if needed all portals      |
+| /listPortals   | N/A         | gammaPortals.command.listPortals   | Lists all portals                              |
+| /removePortal  | Portal name | gammaPortals.command.removePortals | Removes specified portal                       |
+| /removePortals | N/A         | gammaPortals.command.removePortal  | Removes all portals                            |
+
+## Permissions
+
+| Permission                         | Default | Description                     |
+|------------------------------------|---------|---------------------------------|
+| gammaPortals.command.fixPortal     | op      | Allowes usage of /fixPortal     |
+| gammaPortals.command.fixPortals    | op      | Allowes usage of /fixPortals    |
+| gammaPortals.command.listPortals   | true    | Allowes usage of /listPortals   |
+| gammaPortals.command.removePortals | op      | Allowes usage of /removePortals |
+| gammaPortals.command.removePortal  | op      | Allowes usage of /removePortal  |
+| gammaPortals.action.createPortal   | true    | Allowes creation of new portal  |
 
 ## Download
 

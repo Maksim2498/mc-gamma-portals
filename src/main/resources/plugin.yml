@@ -5,3 +5,54 @@ author: maksim2498
 
 main: space.moontalk.mc.gamma.GammaPortals
 api-version: 1.13
+
+commands:
+  fixPortal:
+    description: "Fixes specified portal"
+    permission: gammaPortals.command.fixPortal
+    usage: /<command> <portal name>
+
+  fixPortals:
+    description: "Fixes all portals"
+    permission: gammaPortals.command.fixPortals
+    usage: /<command>
+
+  listPortals:
+    description: "Lists all portals"
+    permission: gammaPortals.command.listPortals
+    usage: /<command>
+
+  removePortal:
+    description: "Removes specified portal"
+    permission: gammaPortals.command.removePortal
+    usage: /<command> <portal name>
+
+  removePortals:
+    description: "Removes all portals"
+    permission: gammaPortals.command.removePortals
+    usage: /<command>
+
+permissions:
+  gammaPortals.command.fixPortal:
+    description: "Allowes usage of /fixPortal"
+    default: op
+
+  gammaPortals.command.fixPortals:
+    description: "Allowes usage of /fixPortals"
+    default: op
+
+  gammaPortals.command.listPortals:
+    description: "Allowes usage of /listPortals"
+    default: true
+
+  gammaPortals.command.removePortal:
+    description: "Allowes usage of /removePortal"
+    default: op
+
+  gammaPortals.command.removePortals:
+    description: "Allowes usage of /removePortals"
+    default: op
+
+  gammaPortals.action.createPortal:
+    description: "Allows creation of new portals"
+    default: true

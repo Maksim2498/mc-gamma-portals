@@ -1,20 +1,16 @@
 package space.moontalk.mc.gamma;
 
-import static space.moontalk.mc.gamma.BlockUtility.findNeighbourOfType;
-import static space.moontalk.mc.gamma.BlockUtility.getDescriptorSignName;
-import static space.moontalk.mc.gamma.BlockUtility.getSignBlock;
-import static space.moontalk.mc.gamma.BlockUtility.isDescriptorSign;
-import static space.moontalk.mc.gamma.BlockUtility.isDescriptorSignLines;
-import static space.moontalk.mc.gamma.BlockUtility.tryGetFaceNeighbour;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -23,10 +19,8 @@ import org.bukkit.block.Sign;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockExplodeEvent;
-import org.bukkit.event.block.BlockPistonExtendEvent;
-import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -43,6 +37,10 @@ import io.papermc.paper.event.entity.EntityPortalReadyEvent;
 import lombok.Getter;
 import lombok.val;
 
+import space.moontalk.mc.gamma.message.MessageProvider;
+
+import static space.moontalk.mc.gamma.BlockUtility.*;
+
 public class PortalManager implements Listener {
     private @NotNull Map<String, Set<Portal>> portals = new HashMap<>();
     private          boolean                  changed = true;
@@ -53,20 +51,29 @@ public class PortalManager implements Listener {
     @Getter
     private final int maxBlocks;
 
-    private static @NotNull String NO_MORE_LEFT_MESSAGE   = "§eNo more portals tagged %s left.";
-    private static @NotNull String ONE_LEFT_MESSAGE       = "§eOne portal tagged %s left.";
-    private static @NotNull String ADD_SIGN_MESSAGE       = "§ePortal is currently inactive.\nAdd descriptor sign to activate it.";
-    private static @NotNull String TOO_MANY_SINGS_MESSAGE = "§cPortal has to many descriptor signs.\nIt must have only one.";
-    private static @NotNull String ALREADY_EXISTS_MESSAGE = "§cPortal pair tagged with %s already exists.";
-    private static @NotNull String ACTIVATED_MESSAGE      = "§aPortal is active and successfully linked.";
-    private static @NotNull String NEED_SECOND_MESSAGE    = "§ePortal is currently inactive.\nCreate second portal tagged %s to activate it.";
+    @Getter
+    private final @NotNull MessageProvider messageProvider;
 
     public PortalManager(@NotNull JavaPlugin plugin) throws IOException, ClassNotFoundException {
-        this.plugin    = plugin;
-        this.maxBlocks = readMaxBlocks();
+        this(plugin, new MessageProvider() {});
+    }
+
+    public PortalManager(@NotNull JavaPlugin plugin, @NotNull MessageProvider messageProvider) throws IOException, ClassNotFoundException {
+        this.plugin          = plugin;
+        this.messageProvider = messageProvider;
+        this.maxBlocks       = readMaxBlocks();
 
         register();
         read();
+    }
+
+    public @NotNull Map<String, Set<Portal>> getPortals() {
+        val portals = new HashMap<String, Set<Portal>>();
+        
+        for (val entry : this.portals.entrySet())
+            portals.put(entry.getKey(), Collections.unmodifiableSet(entry.getValue()));
+
+        return Collections.unmodifiableMap(portals);
     }
 
     private void register() {
@@ -83,6 +90,114 @@ public class PortalManager implements Listener {
             throw new RuntimeException("max-blocks config property has to be positive");
 
         return maxBlocks;
+    }
+
+    public void removePortals() {
+        for (val name : portals.keySet())
+            destroyPortal(name);
+
+        portals.clear();
+    }
+
+    public boolean removePortal(@NotNull String name) {
+        val fullName = fullName(name);
+        val result   = destroyPortal(fullName);
+
+        if (result)
+            this.portals.remove(fullName);
+
+        return result;
+    }
+
+    private boolean destroyPortal(@NotNull String name) {
+        val portals = this.portals.get(name);
+
+        if (portals == null || portals.isEmpty())
+            return false;
+
+        for (val portal : portals) {
+            val source = decY(portal.getExit().getBlock());
+
+            try {
+                val frameBlocks = PortalFrameBlocks.fromFrame(source, maxBlocks);
+
+                if (!frameBlocks.isLit())
+                    continue;
+
+                val signs    = frameBlocks.findDescriptorSigns();
+                val sign     = signs.stream().findAny().get();
+                val signName = getDescriptorSignName(sign);
+
+                if (!signName.equals(name))
+                    continue;
+
+                for (val block : frameBlocks.getInnerBlocks()) 
+                    block.breakNaturally();
+            } catch (Exception exception) {}
+        }
+
+        return true;
+    }
+
+    public void fixPortals() {
+        for (val name : portals.keySet())
+            fixPortal(name);
+    }
+
+    public boolean fixPortal(@NotNull String name) {
+        val fullName = fullName(name);
+        val portals  = this.portals.get(fullName);
+
+        if (portals == null)
+            return false;
+
+        val toAdd = new HashSet<Portal>();
+
+        portals.removeIf(portal -> {
+            val source = decY(portal.getExit().getBlock());
+
+            try {
+                val frameBlocks = PortalFrameBlocks.fromFrame(source, maxBlocks);
+                val signs       = frameBlocks.findDescriptorSigns();
+                
+                return switch (signs.size()) {
+                    case 0 -> true;
+
+                    case 1 -> {
+                        val sign     = signs.stream().findAny().get();
+                        val signName = getDescriptorSignName(sign);
+
+                        if(!fullName.equals(signName))
+                            yield true;
+
+                        toAdd.add(frameBlocks.toPortal());
+
+                        yield true;
+                    }
+
+                    default -> {
+                        for (val sign : signs) 
+                            sign.getBlock().breakNaturally();
+
+                        yield true;
+                    }
+                };
+            } catch (Exception exception) {
+                return true;
+            }
+        });
+
+        for (val portal : toAdd)
+            portals.add(portal);
+
+        if (portals.isEmpty())
+            this.portals.remove(fullName);
+
+        return true;
+    }
+
+    public boolean noPortals() {
+        return portals.isEmpty();
     }
 
     public void save() throws IOException {
@@ -148,30 +263,14 @@ public class PortalManager implements Listener {
     }
 
     @EventHandler
-    public void onBlockPistonRetract(@NotNull BlockPistonRetractEvent event) {
-        for (val block : event.getBlocks())
-            if (tryRemovePortal(block, null))
-                return;
-    }
-
-    @EventHandler
-    public void onBlockPistonExtend(@NotNull BlockPistonExtendEvent event) {
-        for (val block : event.getBlocks())
-            if (tryRemovePortal(block, null))
-                return;
+    public void onBlockDestroy(@NotNull BlockDestroyEvent event) {
+        tryRemovePortal(event.getBlock());
     }
 
     @EventHandler
     public void onEntityExplode(@NotNull EntityExplodeEvent event) {
         for (val block : event.blockList())
-            if (tryRemovePortal(block, null))
-                return;
-    }
-
-    @EventHandler
-    public void onBlockExplode(@NotNull BlockExplodeEvent event) {
-        for (val block : event.blockList()) 
-            if (tryRemovePortal(block, null))
+            if (tryRemovePortal(block))
                 return;
     }
 
@@ -181,6 +280,10 @@ public class PortalManager implements Listener {
         val block  = event.getBlock();
 
         tryRemovePortal(block, player);
+    }
+
+    private boolean tryRemovePortal(@NotNull Block block) {
+        return tryRemovePortal(block, null);
     }
 
     private boolean tryRemovePortal(@NotNull Block block, @Nullable Player player) {
@@ -216,17 +319,17 @@ public class PortalManager implements Listener {
         val name    = getDescriptorSignName(sign);
         val portals = this.portals.computeIfAbsent(name, k -> new HashSet<>());
 
-        if (player != null) {
-            val message = portals.size() == 1
-                        ? String.format(NO_MORE_LEFT_MESSAGE, name)
-                        : String.format(ONE_LEFT_MESSAGE,     name);
-                        
-            player.sendMessage(message); 
-        }
+        if (player != null) 
+            player.sendMessage(portals.size() == 1 ? messageProvider.makeNoPortalsLeftMessage(name)
+                                                   : messageProvider.makeOnePortalLeftMessage(name)); 
 
         val portal = frameBlocks.toPortal();
 
         portals.remove(portal);
+
+        if (portals.isEmpty())
+            this.portals.remove(name);
+
         changed = true;
     }
 
@@ -247,7 +350,7 @@ public class PortalManager implements Listener {
             val signs = frameBlocks.findDescriptorSigns();
 
             if (signs.isEmpty()) {
-                entity.sendMessage(ADD_SIGN_MESSAGE);
+                entity.sendMessage(messageProvider.makeAddSignMessage());
                 return;
             }
 
@@ -256,12 +359,12 @@ public class PortalManager implements Listener {
             val portals = this.portals.computeIfAbsent(name, k -> new HashSet<>());
 
             switch (portals.size()) {
-                case 1 -> entity.sendMessage(String.format(NEED_SECOND_MESSAGE, name));
+                case 1 -> entity.sendMessage(messageProvider.makeAddSecondMessage(name));
                 case 2 -> {
                     val sourcePortal = frameBlocks.toPortal();
                     val targetPortal = getPortalPair(portals, sourcePortal);
 
-                    targetPortal.teleport(entity);
+                    targetPortal.teleport(sourcePortal, entity);
                 }
             }
         } catch (Exception exception) {}
@@ -269,14 +372,25 @@ public class PortalManager implements Listener {
 
     @EventHandler
     public void onPlayerInteract(@NotNull PlayerInteractEvent event) {
-        val block = event.getClickedBlock();
-
-        if (block == null || !PortalFrameBlocks.FRAME_MATERIALS.contains(block.getType()))
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK)
             return;
 
         val item = event.getItem();
 
         if (item == null || item.getType() != Material.ENDER_EYE)
+            return;
+
+        val block = event.getClickedBlock();
+
+        if (block == null)
+            return;
+
+        if (block.getType() == Material.NETHER_PORTAL) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (!PortalFrameBlocks.FRAME_MATERIALS.contains(block.getType()))
             return;
 
         event.setCancelled(true);
@@ -305,9 +419,19 @@ public class PortalManager implements Listener {
     }
 
     private void createPortal(@NotNull PortalFrameBlocks frameBlocks, @NotNull Player player) {
-        val signs   = frameBlocks.findDescriptorSigns();
+        val signs = frameBlocks.findDescriptorSigns();
+
+        if (!player.hasPermission("gammaPortals.action.createPortal")) {
+            player.sendMessage(messageProvider.makeMissingPermissionMessage()); 
+
+            for (val sign : signs)
+                sign.getBlock().breakNaturally();
+
+            return;
+        }
+
         val message = switch (signs.size()) {
-            case 0 -> ADD_SIGN_MESSAGE;
+            case 0 -> messageProvider.makeAddSignMessage();
 
             case 1 -> {
                 val sign    = signs.stream().findAny().get();
@@ -318,18 +442,18 @@ public class PortalManager implements Listener {
                     case 0  -> {
                         portals.add(frameBlocks.toPortal()); 
                         changed = true;
-                        yield String.format(NEED_SECOND_MESSAGE, name);
+                        yield messageProvider.makeAddSecondMessage(name);
                     }
 
                     case 1  -> {
                         portals.add(frameBlocks.toPortal()); 
                         changed = true;
-                        yield ACTIVATED_MESSAGE;
+                        yield messageProvider.makeActivatedMessage();
                     }
 
                     default -> { 
                         sign.getBlock().breakNaturally();
-                        yield String.format(ALREADY_EXISTS_MESSAGE, name); 
+                        yield messageProvider.makeAlreadyExistsMessage(name);
                     }
                 };
             }
@@ -338,7 +462,7 @@ public class PortalManager implements Listener {
                 for (val sign : signs) 
                     sign.getBlock().breakNaturally();
 
-                yield TOO_MANY_SINGS_MESSAGE;
+                yield messageProvider.makeTooManySignsMessage();
             }
         };
 
@@ -354,5 +478,9 @@ public class PortalManager implements Listener {
 
         assert false;
         return null;
+    }
+
+    private @NotNull String fullName(@NotNull String name) {
+        return String.format("[%s]", name);
     }
 }

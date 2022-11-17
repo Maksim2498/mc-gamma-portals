@@ -128,6 +128,10 @@ public class FrameBlocks {
         y /= innerBlocks.size();
         z /= innerBlocks.size();
 
+        x += .5;
+        y += .5;
+        z += .5;
+
         return new Location(world, x, y, z);
     }
 

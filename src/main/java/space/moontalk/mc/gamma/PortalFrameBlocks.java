@@ -38,6 +38,14 @@ public class PortalFrameBlocks extends FrameBlocks {
         Material.WAXED_OXIDIZED_CUT_COPPER
     );
 
+    public static @NotNull PortalFrameBlocks fromFrameOrPortal(@NotNull Block source, int maxBlocks) {
+        try {
+            return fromPortal(source, maxBlocks);
+        } catch (Exception exception) {};
+
+        return fromFrame(source, maxBlocks);
+    }
+
     public static @NotNull PortalFrameBlocks fromFrame(@NotNull Block source, int maxBlocks) {
         if (!FRAME_MATERIALS.contains(source.getType()))
             throw new IllegalArgumentException("not a frame block");
@@ -67,12 +75,16 @@ public class PortalFrameBlocks extends FrameBlocks {
         super(source, maxBlocks, FRAME_MATERIALS, innerMaterial);
     }
 
+    public boolean isLit() {
+        return innerBlocks.stream().anyMatch(b -> b.getType() == Material.NETHER_PORTAL); 
+    }
+
     public void ignite() {
         fill(Material.NETHER_PORTAL);
     }
 
     public @NotNull Portal toPortal() {
-        return new Portal(getId(), getExit());
+        return new Portal(getId(), getExit(), axis);
     }
 
     public @NotNull PortalId getId() {
@@ -82,7 +94,8 @@ public class PortalFrameBlocks extends FrameBlocks {
             center.getWorld().getUID(), 
             center.getBlockX(), 
             center.getBlockY(), 
-            center.getBlockZ()
+            center.getBlockZ(),
+            innerBlocks.size()
         );
     }
 
@@ -90,17 +103,11 @@ public class PortalFrameBlocks extends FrameBlocks {
         val center = getCenter();
         val world  = center.getWorld();
 
-        for (double x = center.getX(), y = center.getY(), z = center.getZ(); y >= world.getMinHeight(); --y) {
-            val block = world.getBlockAt((int) x, (int) y, (int) z);
+        for (double x = center.getX(), y = Math.floor(center.getY()), z = center.getZ(); y >= world.getMinHeight(); --y) {
+            val block = world.getBlockAt((int) Math.floor(x), (int) y, (int) Math.floor(z));
 
-            if (FRAME_MATERIALS.contains(block.getType())) {
-                if (axis == Axis.X)
-                    z += .5;
-                else if (axis == Axis.Z)
-                    x += .5;
-
-                return new Location(world, x, y + 1, z);
-            }
+            if (FRAME_MATERIALS.contains(block.getType()))
+                return new Location(world, x, Math.floor(y) + 1, z);
         }
 
         return center;
